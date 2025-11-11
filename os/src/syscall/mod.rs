@@ -9,6 +9,8 @@
 //! For clarity, each single syscall is implemented as its own function, named
 //! `sys_` then the name of the syscall. You can find functions like this in
 //! submodules, and you should also implement syscalls this way.
+//内核系统调用的总入口和分发中心，负责接收用户态的系统调用请求，
+//根据调用编号分发到具体的处理函数，并在此过程中完成系统调用计数的统计。
 
 /// write syscall
 const SYSCALL_WRITE: usize = 64;
@@ -21,6 +23,8 @@ const SYSCALL_GET_TIME: usize = 169;
 /// trace syscall
 const SYSCALL_TRACE: usize = 410;
 
+/*fs 子模块：通常实现与文件 / 控制台输出相关的系统调用（如 sys_write，对应 SYSCALL_WRITE）。
+process 子模块：实现与进程 / 任务管理相关的系统调用（如 sys_exit、sys_yield、sys_trace 等）。 */
 mod fs;
 mod process;
 
