@@ -7,7 +7,7 @@ struct Stdout;
 impl Write for Stdout {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         for c in s.chars() {
-            console_putchar(c as usize);
+            console_putchar(c as usize);//直接调用 SBI 接口（sbi.rs 封装的底层函数）。
         }
         Ok(())
     }

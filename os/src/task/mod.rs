@@ -8,13 +8,13 @@
 //!
 //! Be careful when you see `__switch` ASM function in `switch.S`. Control flow around this function
 //! might not be what you expect.
-
 mod context;
 mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
 use crate::config::MAX_APP_NUM;
+use crate::config::MAX_SYSCALL_NUM; 
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -51,10 +51,8 @@ lazy_static! {
     /// Global variable: TASK_MANAGER
     pub static ref TASK_MANAGER: TaskManager = {
         let num_app = get_num_app();
-        let mut tasks = [TaskControlBlock {
-            task_cx: TaskContext::zero_init(),
-            task_status: TaskStatus::UnInit,
-        }; MAX_APP_NUM];
+        // 用 TaskControlBlock::new() 初始化，确保 syscall_counts 被正确清零
+        let mut tasks = [TaskControlBlock::new(); MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
             task.task_status = TaskStatus::Ready;
@@ -72,6 +70,49 @@ lazy_static! {
 }
 
 impl TaskManager {
+    // 初始化任务管理器时，使用 TaskControlBlock::new() 而非直接初始化
+    ///
+    pub fn init() -> Self {
+        let num_app = get_num_app();
+        // 用 new() 初始化每个任务控制块（包含清零的 syscall_counts）
+        let mut tasks = [TaskControlBlock::new(); MAX_APP_NUM];
+        for (i, t) in tasks.iter_mut().enumerate().take(num_app) {
+            t.task_cx = TaskContext::goto_restore(init_app_cx(i));
+            t.task_status = TaskStatus::Ready;
+        }
+        TaskManager {
+            num_app,
+            inner: unsafe {
+                UPSafeCell::new(TaskManagerInner {
+                    tasks,
+                    current_task: 0,
+                })
+            },
+        }
+    }
+
+    /// 新增：获取当前任务的系统调用计数（供 sys_trace 使用）
+    pub fn get_current_syscall_count(&self, syscall_id: usize) -> Option<usize> {
+        if syscall_id >= MAX_SYSCALL_NUM {
+            return None;
+        }
+        let inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        Some(inner.tasks[current].syscall_counts[syscall_id])
+    }
+
+    /// 新增：更新当前任务的系统调用计数（每次调用系统调用时触发）
+    pub fn inc_current_syscall_count(&self, syscall_id: usize) {
+        if syscall_id >= MAX_SYSCALL_NUM {
+            return;
+        }
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].syscall_counts[syscall_id] += 1;
+    }
+
+    // 其余方法（run_first_task、mark_current_suspended 等）保持不变
+    // ...（原代码中的 run_first_task、mark_current_suspended 等）
     /// Run the first task in task list.
     ///
     /// Generally, the first task in task list is an idle task (we call it zero process later).
