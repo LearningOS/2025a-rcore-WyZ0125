@@ -88,7 +88,7 @@ impl TaskManager {
         }
         panic!("unreachable in run_first_task!");
     }
-
+    
     /// Change the status of current `Running` task into `Ready`.
     fn mark_current_suspended(&self) {
         let mut inner = self.inner.exclusive_access();
@@ -119,13 +119,21 @@ impl TaskManager {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_user_token()
     }
-
+    
     /// Get the current 'Running' task's trap contexts.
     fn get_current_trap_cx(&self) -> &'static mut TrapContext {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].get_trap_cx()
     }
-
+    ///安全访问当前任务，闭包模式
+    pub fn access_current_task<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut TaskControlBlock) -> R,
+    {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        f(&mut inner.tasks[current])
+    }
     /// Change the current 'Running' task's program break
     pub fn change_current_program_brk(&self, size: i32) -> Option<usize> {
         let mut inner = self.inner.exclusive_access();
