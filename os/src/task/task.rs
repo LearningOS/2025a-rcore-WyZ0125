@@ -8,6 +8,8 @@ use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
+/// Big stride used to compute pass = BIG_STRIDE / priority
+const BIG_STRIDE: usize = 1_000_000;
 
 /// Task control block structure
 ///
@@ -68,6 +70,13 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+    /* --- stride scheduling fields --- */
+    /// process priority (>= 2), default 16
+    pub priority: usize,
+    /// accumulated stride (lower means scheduled sooner)
+    pub stride: usize,
+    /// pass value (the increment to stride after being scheduled) = BIG_STRIDE / priority
+    pub pass: usize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +127,10 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    // stride scheduling defaults:
+                    priority: 16,               // default priority
+                    stride: 0,                  // initially 0
+                    pass: BIG_STRIDE / 16,      // pass = big / priority    
                 })
             },
         };
@@ -191,6 +204,11 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    // 在构造 child TaskControlBlockInner 时：
+                    priority: parent_inner.priority,
+                    stride: parent_inner.stride, // 可以继承父进程当前 stride（也可以为 0，按你设计）
+                    pass: parent_inner.pass,
+
                 })
             },
         });

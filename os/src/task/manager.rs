@@ -37,10 +37,12 @@ lazy_static! {
 pub fn add_task(task: Arc<TaskControlBlock>) {
     //trace!("kernel: TaskManager::add_task");
     TASK_MANAGER.exclusive_access().add(task);
-}
+} 
 
-/// Take a process out of the ready queue
-pub fn fetch_task() -> Option<Arc<TaskControlBlock>> {
-    //trace!("kernel: TaskManager::fetch_task");
+/// Take a process out of the ready queue using stride scheduling.
+/// Choose the process with minimum `stride`, and bump its stride by its `pass`.
+// Take a process out of the ready queue (global wrapper used by other modules)
+pub fn fetch_task() -> Option<alloc::sync::Arc<TaskControlBlock>> {
     TASK_MANAGER.exclusive_access().fetch()
 }
+

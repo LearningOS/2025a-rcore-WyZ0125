@@ -270,7 +270,67 @@ impl MemorySet {
     pub fn recycle_data_pages(&mut self) {
         self.areas.clear();
     }
+     /// Return true if any area overlaps with vpn_range
+    pub fn is_overlapped(&self, vpn_range: &crate::mm::VPNRange) -> bool {
+        for area in self.areas.iter() {
+            // We rely on SimpleRange methods — if your SimpleRange has different API,
+            // adapt to its overlap check (e.g. `overlap_with` / `overlaps` / manual checks).
+            // Here we try a conservative approach: test range intersection by endpoints.
+            let a_start: usize = area.vpn_range.get_start().into();
+            let a_end: usize = area.vpn_range.get_end().into();
+            let q_start: usize = vpn_range.get_start().into();
+            let q_end: usize = vpn_range.get_end().into();
+            if !(a_end <= q_start || q_end <= a_start) {
+                return true;
+            }
+        }
+        false
+    }
 
+    /// Check whether all pages in vpn_range are currently mapped.
+    pub fn is_fully_mapped(&self, vpn_range: &crate::mm::VPNRange) -> bool {
+        for vpn in vpn_range.clone() {
+            // rely on page table translate (MemorySet has translate wrapper)
+            if self.translate(vpn).is_none() {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// Remove all areas that overlap vpn_range (unmap pages and drop frames)
+    /// Simplified: removes any MapArea that overlaps the vpn_range.
+    pub fn remove_area(&mut self, vpn_range: &crate::mm::VPNRange) {
+        // iterate and retain areas that do NOT overlap; for overlapping ones, call unmap
+        let mut keep: alloc::vec::Vec<MapArea> = alloc::vec::Vec::new();
+        for mut area in self.areas.drain(..) {
+            let a_start: usize = area.vpn_range.get_start().into();
+            let a_end: usize = area.vpn_range.get_end().into();
+            let q_start: usize = vpn_range.get_start().into();
+            let q_end: usize = vpn_range.get_end().into();
+            if !(a_end <= q_start || q_end <= a_start) {
+                // overlapping: unmap it from page table
+                area.unmap(&mut self.page_table);
+                // frames (if Framed) will be dropped when area goes out of scope (data_frames removed)
+            } else {
+                keep.push(area);
+            }
+        }
+        self.areas = keep;
+    }
+
+    /// insert_framed_area_with_result: wrapper to insert framed area, returning Result
+    pub fn insert_framed_area_with_result(
+        &mut self,
+        start: crate::mm::VirtAddr,
+        end: crate::mm::VirtAddr,
+        perm: crate::mm::MapPermission,
+    ) -> Result<(), ()> {
+        // For simplicity we forward to existing insert_framed_area (if present).
+        // If your MemorySet API's insert name differs, adapt appropriately.
+        self.insert_framed_area(start, end, perm);
+        Ok(())
+    }
     /// shrink the area to new_end
     #[allow(unused)]
     pub fn shrink_to(&mut self, start: VirtAddr, new_end: VirtAddr) -> bool {
