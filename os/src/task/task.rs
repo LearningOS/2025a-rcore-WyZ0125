@@ -83,6 +83,7 @@ impl TaskControlBlockInner {
     fn get_status(&self) -> TaskStatus {
         self.task_status
     }
+    
     pub fn is_zombie(&self) -> bool {
         self.get_status() == TaskStatus::Zombie
     }
